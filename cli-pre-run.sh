@@ -1,28 +1,37 @@
 # --- AI CLI wrappers: worktree-first + auto-branch + approval bypass ---------
-# Short commands:
-#   cdx -> codex
-#   cld -> claude
-#   gmi -> gemini
-#
-# Behavior:
-# - If in git repo AND on main AND clean:
-#     -> prompt for branch name
-#     -> create branch + git worktree (no checkout switch)
-#     -> run tool inside worktree
-# - If not on main:
-#     -> prompt: y = continue, m = checkout main, N = abort
-# - If on main but dirty:
-#     -> prompt to continue anyway
-#
-# Default approval-bypass flags are injected per tool via env vars:
-#   AI_CLAUDE_FLAGS, AI_GEMINI_FLAGS, AI_CODEX_FLAGS
-# ---------------------------------------------------------------------------
+# (only changes: non-main path prompt/options + worktree creation from there)
 
 # -------- config ------------------------------------------------------------
 : "${AI_WORKTREE_ROOT:=.ai-worktrees}"
 : "${AI_CLAUDE_FLAGS:=}"
 : "${AI_GEMINI_FLAGS:=}"
 : "${AI_CODEX_FLAGS:=}"
+
+# -------- color + logging ---------------------------------------------------
+_ai_is_tty() { [[ -t 2 ]]; }
+
+_ai_c_reset=$'\033[0m'
+_ai_c_dim=$'\033[2m'
+_ai_c_red=$'\033[31m'
+_ai_c_green=$'\033[32m'
+_ai_c_yellow=$'\033[33m'
+_ai_c_blue=$'\033[34m'
+_ai_c_magenta=$'\033[35m'
+_ai_c_cyan=$'\033[36m'
+_ai_c_bold=$'\033[1m'
+
+_ai_color() {
+  local c="$1"; shift
+  if _ai_is_tty; then printf '%s%s%s' "$c" "$*" "$_ai_c_reset"
+  else printf '%s' "$*"
+  fi
+}
+
+_ai_log()   { printf '%s\n' "$(_ai_color "$_ai_c_dim"  "•") $*" >&2; }
+_ai_info()  { printf '%s\n' "$(_ai_color "$_ai_c_cyan" "→") $*" >&2; }
+_ai_ok()    { printf '%s\n' "$(_ai_color "$_ai_c_green" "✓") $*" >&2; }
+_ai_warn()  { printf '%s\n' "$(_ai_color "$_ai_c_yellow" "!") $*" >&2; }
+_ai_err()   { printf '%s\n' "$(_ai_color "$_ai_c_red" "✗") $*" >&2; }
 
 # -------- git helpers -------------------------------------------------------
 _ai_in_git_repo() {
@@ -50,13 +59,13 @@ _ai_prompt_branch_name() {
   local suggested="$1"
   local name
 
-  echo "Creating a new branch (on main + clean)." >&2
-  echo "Suggested: $suggested" >&2
+  _ai_info "Creating a new branch + worktree"
+  _ai_log  "Suggested branch: $(_ai_color "$_ai_c_magenta" "$suggested")"
   read -r -p "Branch name (enter to accept): " name >&2
   [[ -z "$name" ]] && name="$suggested"
 
   git check-ref-format --branch "$name" >/dev/null 2>&1 || {
-    echo "Invalid branch name: $name" >&2
+    _ai_err "Invalid branch name: $name"
     return 1
   }
 
@@ -76,6 +85,38 @@ _ai_next_free_dir() {
     i=$((i+1))
   done
   printf '%s' "$dir"
+}
+
+_ai_create_worktree_and_run() {
+  # args: tool base_ref ...tool_args
+  local tool="$1"; shift
+  local base_ref="$1"; shift
+
+  local ts slug suggested new_branch wt_root wt_dir_base wt_dir
+
+  ts="$(date +%Y%m%d-%H%M%S)"
+  slug="$(_ai_slug_from_args "$@")"
+  [[ -z "$slug" ]] && slug="prompt"
+  suggested="ai/${tool}/${ts}-${slug}"
+
+  new_branch="$(_ai_prompt_branch_name "$suggested")" || return $?
+
+  wt_root="$AI_WORKTREE_ROOT"
+  mkdir -p "$wt_root" || return $?
+
+  wt_dir_base="${wt_root}/$(_ai_worktree_dir_for_branch "$new_branch")"
+  wt_dir="$(_ai_next_free_dir "$wt_dir_base")"
+
+  _ai_info "Creating worktree…"
+  _ai_log  "base   : $(_ai_color "$_ai_c_magenta" "$base_ref")"
+  _ai_log  "branch : $(_ai_color "$_ai_c_magenta" "$new_branch")"
+  _ai_log  "dir    : $(_ai_color "$_ai_c_magenta" "$wt_dir")"
+
+  git worktree add -b "$new_branch" "$wt_dir" "$base_ref" || return $?
+
+  _ai_ok "Worktree created"
+  _ai_info "Running $(_ai_color "$_ai_c_bold" "$tool") inside worktree"
+  ( cd "$wt_dir" && command "$tool" "$@" )
 }
 
 # -------- tool resolution & flags ------------------------------------------
@@ -102,6 +143,7 @@ _ai_run_with_branching() {
   local tool="$1"; shift
 
   if ! _ai_in_git_repo; then
+    _ai_warn "Not in a git repo; running $(_ai_color "$_ai_c_bold" "$tool") here."
     command "$tool" "$@"
     return $?
   fi
@@ -113,49 +155,40 @@ _ai_run_with_branching() {
 
   # main + clean -> worktree
   if [[ "$br" == "main" ]] && (( clean )); then
-    local ts slug suggested new_branch wt_root wt_dir_base wt_dir
-
-    ts="$(date +%Y%m%d-%H%M%S)"
-    slug="$(_ai_slug_from_args "$@")"
-    [[ -z "$slug" ]] && slug="prompt"
-    suggested="ai/${tool}/${ts}-${slug}"
-
-    new_branch="$(_ai_prompt_branch_name "$suggested")" || return $?
-
-    wt_root="$AI_WORKTREE_ROOT"
-    mkdir -p "$wt_root" || return $?
-
-    wt_dir_base="${wt_root}/$(_ai_worktree_dir_for_branch "$new_branch")"
-    wt_dir="$(_ai_next_free_dir "$wt_dir_base")"
-
-    git worktree add -b "$new_branch" "$wt_dir" main || return $?
-
-    echo "→ worktree: $wt_dir" >&2
-    echo "→ branch  : $new_branch" >&2
-
-    ( cd "$wt_dir" && command "$tool" "$@" )
+    _ai_info "Worktree mode: on main + clean"
+    _ai_create_worktree_and_run "$tool" "main" "$@"
     return $?
   fi
 
   # other states
-  echo "Git state:"
-  echo "  branch: ${br:-"(detached)"}"
-  echo "  clean : $([[ $clean -eq 1 ]] && echo yes || echo no)"
+  printf '%s\n' "$(_ai_color "$_ai_c_blue" "Git state:")" >&2
+  printf '  %s %s\n' "$(_ai_color "$_ai_c_dim" "branch:")" "$(_ai_color "$_ai_c_magenta" "${br:-"(detached)"}")" >&2
+  printf '  %s %s\n' "$(_ai_color "$_ai_c_dim" "clean :")"  "$([[ $clean -eq 1 ]] && _ai_color "$_ai_c_green" yes || _ai_color "$_ai_c_yellow" no)" >&2
 
   local ans
-  if [[ "$br" != "main" ]]; then
-    read -r -p "Run '$tool' here? [y=continue, m=checkout main, N=abort]: " ans
-    if [[ "$ans" =~ ^[Mm]$ ]]; then
-      git checkout main || return $?
-      _ai_run_with_branching "$tool" "$@"
-      return $?
-    fi
-    [[ "$ans" =~ ^[Yy]$ ]] || return 1
-  else
-    read -r -p "Continue running '$tool' anyway? [y/N]: " ans
-    [[ "$ans" =~ ^[Yy]$ ]] || return 1
+  read -r -p "Choose: [c=continue on current, w=create+checkout new worktree, s=stop]: " ans
+
+  if [[ "$ans" =~ ^[Ss]$ ]]; then
+    _ai_warn "Stopped."
+    return 1
   fi
 
+  if [[ "$ans" =~ ^[Ww]$ ]]; then
+    # Base the worktree off the current branch if we have one, otherwise HEAD.
+    local base_ref
+    base_ref="${br:-HEAD}"
+
+    if (( ! clean )); then
+      _ai_warn "Working tree is dirty; worktree will NOT include uncommitted changes."
+    fi
+
+    _ai_create_worktree_and_run "$tool" "$base_ref" "$@"
+    return $?
+  fi
+
+  [[ "$ans" =~ ^[Cc]$ ]] || return 1
+
+  _ai_info "Running $(_ai_color "$_ai_c_bold" "$tool") on current worktree (no new worktree)."
   command "$tool" "$@"
 }
 
