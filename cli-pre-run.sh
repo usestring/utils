@@ -1,5 +1,18 @@
-# --- AI CLI wrappers: worktree-first + auto-branch + approval bypass ---------
-# (only changes: non-main path prompt/options + worktree creation from there)
+# --- AI CLI wrappers: optional worktree + auto-branch + approval bypass -----
+# Short commands:
+#   cdx -> codex
+#   cld -> claude
+#   gmi -> gemini
+#
+# Behavior:
+# - If NOT in a git repo:
+#     -> run tool here
+# - If in a git repo:
+#     -> show git state (branch, clean)
+#     -> prompt:
+#          k = keep current (no worktree)
+#          w = create + checkout new worktree (prompts for branch name)
+#          s = stop
 
 # -------- config ------------------------------------------------------------
 : "${AI_WORKTREE_ROOT:=.ai-worktrees}"
@@ -27,11 +40,11 @@ _ai_color() {
   fi
 }
 
-_ai_log()   { printf '%s\n' "$(_ai_color "$_ai_c_dim"  "•") $*" >&2; }
-_ai_info()  { printf '%s\n' "$(_ai_color "$_ai_c_cyan" "→") $*" >&2; }
-_ai_ok()    { printf '%s\n' "$(_ai_color "$_ai_c_green" "✓") $*" >&2; }
+_ai_log()   { printf '%s\n' "$(_ai_color "$_ai_c_dim"    "•") $*" >&2; }
+_ai_info()  { printf '%s\n' "$(_ai_color "$_ai_c_cyan"   "→") $*" >&2; }
+_ai_ok()    { printf '%s\n' "$(_ai_color "$_ai_c_green"  "✓") $*" >&2; }
 _ai_warn()  { printf '%s\n' "$(_ai_color "$_ai_c_yellow" "!") $*" >&2; }
-_ai_err()   { printf '%s\n' "$(_ai_color "$_ai_c_red" "✗") $*" >&2; }
+_ai_err()   { printf '%s\n' "$(_ai_color "$_ai_c_red"    "✗") $*" >&2; }
 
 # -------- git helpers -------------------------------------------------------
 _ai_in_git_repo() {
@@ -125,7 +138,8 @@ _ai_resolve_tool() {
     cdx) printf '%s' codex ;;
     cld) printf '%s' claude ;;
     gmi) printf '%s' gemini ;;
-    *)   printf '%s' "$1" ;;
+    codex|claude|gemini) printf '%s' "$1" ;;
+    *) printf '%s' "$1" ;;
   esac
 }
 
@@ -139,7 +153,7 @@ _ai_tool_flags() {
 }
 
 # -------- core runner -------------------------------------------------------
-_ai_run_with_branching() {
+_ai_run_with_optional_worktree() {
   local tool="$1"; shift
 
   if ! _ai_in_git_repo; then
@@ -153,20 +167,12 @@ _ai_run_with_branching() {
   clean=0
   _ai_git_is_clean && clean=1
 
-  # main + clean -> worktree
-  if [[ "$br" == "main" ]] && (( clean )); then
-    _ai_info "Worktree mode: on main + clean"
-    _ai_create_worktree_and_run "$tool" "main" "$@"
-    return $?
-  fi
-
-  # other states
   printf '%s\n' "$(_ai_color "$_ai_c_blue" "Git state:")" >&2
   printf '  %s %s\n' "$(_ai_color "$_ai_c_dim" "branch:")" "$(_ai_color "$_ai_c_magenta" "${br:-"(detached)"}")" >&2
   printf '  %s %s\n' "$(_ai_color "$_ai_c_dim" "clean :")"  "$([[ $clean -eq 1 ]] && _ai_color "$_ai_c_green" yes || _ai_color "$_ai_c_yellow" no)" >&2
 
   local ans
-  read -r -p "Choose: [c=continue on current, w=create+checkout new worktree, s=stop]: " ans
+  read -r -p "Choose: [k=keep current, w=create+checkout worktree, s=stop]: " ans
 
   if [[ "$ans" =~ ^[Ss]$ ]]; then
     _ai_warn "Stopped."
@@ -174,8 +180,8 @@ _ai_run_with_branching() {
   fi
 
   if [[ "$ans" =~ ^[Ww]$ ]]; then
-    # Base the worktree off the current branch if we have one, otherwise HEAD.
     local base_ref
+    # If detached, base on HEAD; otherwise base on current branch.
     base_ref="${br:-HEAD}"
 
     if (( ! clean )); then
@@ -186,7 +192,7 @@ _ai_run_with_branching() {
     return $?
   fi
 
-  [[ "$ans" =~ ^[Cc]$ ]] || return 1
+  [[ "$ans" =~ ^[Kk]$ ]] || return 1
 
   _ai_info "Running $(_ai_color "$_ai_c_bold" "$tool") on current worktree (no new worktree)."
   command "$tool" "$@"
@@ -203,7 +209,7 @@ _ai_run_with_default_flags() {
 
   [[ -n "$flags_str" ]] && read -r -a flags <<<"$flags_str"
 
-  _ai_run_with_branching "$tool" "${flags[@]}" "$@"
+  _ai_run_with_optional_worktree "$tool" "${flags[@]}" "$@"
 }
 
 # -------- commands ----------------------------------------------------------
@@ -211,9 +217,9 @@ cdx() { _ai_run_with_default_flags cdx "$@"; }
 cld() { _ai_run_with_default_flags cld "$@"; }
 gmi() { _ai_run_with_default_flags gmi "$@"; }
 
-# optional: keep long names
-codex()  { _ai_run_with_default_flags codex  "$@"; }
-claude() { _ai_run_with_default_flags claude "$@"; }
-gemini() { _ai_run_with_default_flags gemini "$@"; }
+# optional: keep long names (and keep bypass flags behavior here)
+codex()  { _ai_run_with_default_flags codex  "$@" --full-auto; }
+claude() { _ai_run_with_default_flags claude "$@" --permission-mode bypassPermissions; }
+gemini() { _ai_run_with_default_flags gemini "$@" -y -s; }
 # ---------------------------------------------------------------------------
 
