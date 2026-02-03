@@ -15,7 +15,7 @@
 #          s = stop
 
 # -------- config ------------------------------------------------------------
-: "${AI_WORKTREE_ROOT:=.ai-worktrees}"
+: "${AI_WORKTREE_ROOT:=worktrees}"
 : "${AI_CLAUDE_FLAGS:=}"
 : "${AI_GEMINI_FLAGS:=}"
 : "${AI_CODEX_FLAGS:=}"
@@ -222,4 +222,3 @@ codex()  { _ai_run_with_default_flags codex  "$@" --full-auto; }
 claude() { _ai_run_with_default_flags claude "$@" --permission-mode bypassPermissions; }
 gemini() { _ai_run_with_default_flags gemini "$@" -y -s; }
 # ---------------------------------------------------------------------------
-
