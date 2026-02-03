@@ -15,7 +15,7 @@
 #          s = stop
 
 # -------- config ------------------------------------------------------------
-: "${AI_WORKTREE_ROOT:=worktrees}"
+: "${AI_WORKTREE_ROOT:=../worktrees}"
 : "${AI_CLAUDE_FLAGS:=}"
 : "${AI_GEMINI_FLAGS:=}"
 : "${AI_CODEX_FLAGS:=}"
