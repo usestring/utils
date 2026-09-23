@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Ordinary primary and secondary</title>
+    <style>
+      body {
+        font:
+          16px/1.4 system-ui,
+          sans-serif;
+        margin: 24px;
+        background: #fff;
+        color: #111;
+      }
+      .upsell {
+        border: 1px solid #ddd;
+        padding: 16px;
+        max-width: 520px;
+      }
+      .primary {
+        background: #0b6b3a;
+        color: #fff;
+        border: 0;
+        border-radius: 24px;
+        padding: 16px 48px;
+        font-size: 20px;
+        font-weight: 700;
+      }
+      .link {
+        background: none;
+        border: 0;
+        padding: 0;
+        color: #9ca3af;
+        text-decoration: underline;
+        font-size: 13px;
+      }
+      .secondary {
+        background: #fff;
+        color: #0b6b3a;
+        border: 2px solid #0b6b3a;
+        border-radius: 24px;
+        padding: 16px 48px;
+        font-size: 20px;
+        font-weight: 700;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="upsell">
+      <h2>Edit traveler</h2>
+      <button type="button" class="primary" data-action="save">Save changes</button>
+      <a href="#" class="link" data-action="cancel" onclick="return false;">Cancel</a>
+    </div>
+    <script>
+      window.__clicks = [];
+      document.addEventListener("click", (e) => {
+        const t = e.target.closest("[data-action]");
+        if (t) window.__clicks.push(t.dataset.action);
+      });
+    </script>
+  </body>
+</html>

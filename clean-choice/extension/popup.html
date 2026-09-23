@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Clean Choice</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <header>
+      <h1>Clean Choice</h1>
+      <label class="toggle"><input id="site-disabled" type="checkbox" /> Off for this site</label>
+    </header>
+    <p id="status" role="status">Scan this page for upsells that hide the way to decline.</p>
+    <button id="scan" type="button">Scan page</button>
+    <ul id="results"></ul>
+    <button id="undo-all" type="button" hidden>Undo all changes</button>
+    <script type="module" src="popup.js"></script>
+  </body>
+</html>
