@@ -1,0 +1,11 @@
+{
+  "manifest_version": 3,
+  "name": "Clean Choice",
+  "version": "0.1.0",
+  "description": "Finds checkout upsells that hide the way to decline, and shows both choices equally.",
+  "permissions": ["activeTab", "scripting", "storage"],
+  "action": {
+    "default_title": "Clean Choice",
+    "default_popup": "popup.html"
+  }
+}

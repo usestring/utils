@@ -1,0 +1,62 @@
+body {
+  width: 340px;
+  margin: 0;
+  padding: 12px;
+  font:
+    14px/1.4 system-ui,
+    sans-serif;
+  color: #111827;
+}
+header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+h1 {
+  font-size: 16px;
+  margin: 0;
+}
+button {
+  min-height: 36px;
+  padding: 6px 12px;
+  border: 1px solid #1f2937;
+  border-radius: 6px;
+  background: #fff;
+  font: inherit;
+  cursor: pointer;
+}
+button:focus-visible,
+input:focus-visible {
+  outline: 3px solid #2563eb;
+  outline-offset: 2px;
+}
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+ul {
+  list-style: none;
+  padding: 0;
+  margin: 12px 0;
+  display: grid;
+  gap: 10px;
+}
+li {
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  padding: 8px;
+}
+li ul {
+  list-style: disc;
+  padding-left: 18px;
+  margin: 6px 0;
+  display: block;
+}
+.actions {
+  display: flex;
+  gap: 6px;
+}
+.verdict {
+  font-weight: 600;
+}
